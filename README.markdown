@@ -5,16 +5,15 @@
 
 See the "TokenFieldExample" app for details on usage. It's limited at the moment to one tokenising field and a content view below because it's pulled straight from one of my apps. Multiple field support requires tweaking.
 
-If you're using an external picker, like the contacts picker included with iOS, make sure you call dismissModalViewControllerÉ before calling addToken on the field, otherwise existing tokens will be lost.
+If you're using an external picker, like the contacts picker included with iOS, make sure you call dismissModalViewControllerï¿½ before calling addToken on the field, otherwise existing tokens will be lost.
 
 ## License
 
 This control is dual licensed:
 You can use it for free under the BSD licence below or, 
-If you require non-attribution you can purchase the commercial licence available at
-http://www.cocoacontrols.com/authors/thermogl
+If you require non-attribution you can purchase the commercial licence available at http://www.cocoacontrols.com/authors/thermogl
 
-Copyright (c) 2011 Tom Irving. All rights reserved.
+Copyright (c) 2012 - 2013 Tom Irving. All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
 
