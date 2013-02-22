@@ -41,18 +41,46 @@
 - (NSString *)tokenField:(TITokenField *)tokenField searchResultStringForRepresentedObject:(id)object;
 - (UITableViewCell *)tokenField:(TITokenField *)tokenField resultsTableView:(UITableView *)tableView cellForRepresentedObject:(id)object;
 - (CGFloat)tokenField:(TITokenField *)tokenField resultsTableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath;
+
+//return results for given search phrase
+//return empty array or nil if there are no results
+//WARNING: this method is callen on background thread, so do not update any UI from it
+//  if you don't implement tokenField:resultsTableView:cellForRepresentedObject:, results have to be NSStrings
+//  if you do implement that method, results can be any objects - each object is later passed to:
+//      tokenField:resultsTableView:cellForRepresentedObject:
+- (NSArray *)tokenField:(TITokenField *)tokenField resultsForSearchPattern:(NSString *)pattern;
+
+//called when a token is about to be created
+//gived chance to delegate to return different title (trimmed etc.)
+- (NSString *)tokenField:(TITokenField *)tokenField willCreateTokenWithTitle:(NSString *)title;
+
+//called when a token is about to be added
+//if this originiates from user having typed a text and hit return, there won't be any object attached to a token
+//and you probably want to set token.object to some meaningful object
+//(same kind of object you return from tokenField:resultsForSearchPattern:)
+//  title = text entered by user before they hit return
+- (void)tokenField:(TITokenField *)tokenField willAddToken:(TIToken *)token withTitle:(NSString *)title;
+
+//called when a new token is added (text changes to a token)
+//you can modify token's tint for example
+- (void)tokenField:(TITokenField *)tokenField didAddToken:(TIToken *)token;
+
+//called when a token is removed (token is deleted by pressing backspace)
+- (void)tokenField:(TITokenField *)tokenField didRemoveToken:(TIToken *)token;
+
 @end
 
 @protocol TITokenFieldDelegate <UITextFieldDelegate>
 @optional
 - (void)tokenFieldWillResize:(TITokenField *)tokenField animated:(BOOL)animated;
 - (void)tokenFieldDidResize:(TITokenField *)tokenField animated:(BOOL)animated;
+
 @end
 
 @interface TITokenFieldInternalDelegate : NSObject <UITextFieldDelegate> {
 	
-	id <UITextFieldDelegate> delegate;
-	TITokenField * tokenField;
+	id <UITextFieldDelegate> __unsafe_unretained delegate;
+	TITokenField * __unsafe_unretained tokenField;
 }
 
 @end
@@ -78,13 +106,15 @@
 }
 
 @property (nonatomic, assign) BOOL showAlreadyTokenized;
-@property (nonatomic, assign) id <TITokenFieldViewDelegate> delegate;
+@property (nonatomic, unsafe_unretained) id <TITokenFieldViewDelegate> delegate;
 @property (nonatomic, readonly) TITokenField * tokenField;
 @property (nonatomic, readonly) UIView * separator;
 @property (nonatomic, readonly) UITableView * resultsTable;
 @property (nonatomic, readonly) UIView * contentView;
 @property (nonatomic, copy) NSArray * sourceArray;
-@property (nonatomic, readonly) NSArray * tokenTitles;
+@property (unsafe_unretained, nonatomic, readonly) NSArray * tokenTitles;
+@property (atomic, strong) NSOperationQueue * searchQueue;
+
 
 - (void)updateContentSize;
 
@@ -95,11 +125,11 @@
 //==========================================================
 @interface TITokenField : UITextField {
 	
-	id <TITokenFieldDelegate> delegate;
+	id <TITokenFieldDelegate> __unsafe_unretained delegate;
 	TITokenFieldInternalDelegate * internalDelegate;
 	
 	NSMutableArray * tokens;
-	TIToken * selectedToken;
+	TIToken * __unsafe_unretained selectedToken;
 	
 	BOOL editable;
 	BOOL resultsModeEnabled;
@@ -109,24 +139,25 @@
 	int numberOfLines;
 	
 	UIButton * addButton;
-	id addButtonTarget;
+	id __unsafe_unretained addButtonTarget;
 	SEL addButtonSelector;
 	
 	NSCharacterSet * tokenizingCharacters;
 }
 
-@property (nonatomic, assign) id <TITokenFieldDelegate> delegate;
+@property (nonatomic, unsafe_unretained) TITokenFieldView *tokenFieldView;
+@property (nonatomic, unsafe_unretained) id <TITokenFieldDelegate> delegate;
 @property (nonatomic, readonly) NSArray * tokens;
-@property (nonatomic, readonly) TIToken * selectedToken;
-@property (nonatomic, readonly) NSArray * tokenTitles;
-@property (nonatomic, readonly) NSArray * tokenObjects;
+@property (unsafe_unretained, nonatomic, readonly) TIToken * selectedToken;
+@property (unsafe_unretained, nonatomic, readonly) NSArray * tokenTitles;
+@property (unsafe_unretained, nonatomic, readonly) NSArray * tokenObjects;
 @property (nonatomic, assign) BOOL editable;
 @property (nonatomic, assign) BOOL resultsModeEnabled;
 @property (nonatomic, assign) BOOL removesTokensOnEndEditing;
 @property (nonatomic, readonly) int numberOfLines;
-@property (nonatomic, assign) id addButtonTarget;
+@property (nonatomic, unsafe_unretained) id addButtonTarget;
 @property (nonatomic, assign) SEL addButtonSelector;
-@property (nonatomic, retain) NSCharacterSet * tokenizingCharacters;
+@property (nonatomic, strong) NSCharacterSet * tokenizingCharacters;
 
 - (void)addToken:(TIToken *)title;
 - (TIToken *)addTokenWithTitle:(NSString *)title;
@@ -168,11 +199,11 @@ typedef enum {
 }
 
 @property (nonatomic, copy) NSString * title;
-@property (nonatomic, retain) UIFont * font;
-@property (nonatomic, retain) UIColor * tintColor UI_APPEARANCE_SELECTOR;
+@property (nonatomic, strong) UIFont * font;
+@property (nonatomic, strong) UIColor * tintColor UI_APPEARANCE_SELECTOR;
 @property (nonatomic, assign) CGFloat maxWidth;
 @property (nonatomic, assign) TITokenAccessoryType accessoryType;
-@property (nonatomic, retain) id representedObject;
+@property (nonatomic, strong) id representedObject;
 
 - (id)initWithTitle:(NSString *)aTitle;
 - (id)initWithTitle:(NSString *)aTitle representedObject:(id)object;

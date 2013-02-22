@@ -17,19 +17,13 @@
 	
 	TokenFieldExampleViewController * viewController = [[TokenFieldExampleViewController alloc] init];
 	UINavigationController * navigationController = [[UINavigationController alloc] initWithRootViewController:viewController];
-	[viewController release];
 	
     [window setRootViewController:navigationController];
-	[navigationController release];
 	
     [window makeKeyAndVisible];
 
     return YES;
 }
 
-- (void)dealloc {
-    [window release];
-    [super dealloc];
-}
 
 @end

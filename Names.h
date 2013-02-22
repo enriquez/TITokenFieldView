@@ -8,6 +8,20 @@
 
 #import <Foundation/Foundation.h>
 
+@interface Contact : NSObject
+
+- (id)initWithName:(NSString *)aName andEmail:(NSString *)anEmail;
+
+@property (nonatomic, strong) NSString *name;
+@property (nonatomic, strong) NSString *email;
+
+@end
+
 @interface Names : NSObject
+
 + (NSArray *)listOfNames;
+
+//returns list of Contact objects
++ (NSArray /* Contact */ *)listOfContacts;
+
 @end
