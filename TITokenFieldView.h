@@ -114,7 +114,9 @@
 @property (nonatomic, copy) NSArray * sourceArray;
 @property (unsafe_unretained, nonatomic, readonly) NSArray * tokenTitles;
 @property (atomic, strong) NSOperationQueue * searchQueue;
-
+//NO = leave results table open after user selects a suggestion
+//YES = close the table
+@property (nonatomic, assign) BOOL hideResultsTableOnSelection;
 
 - (void)updateContentSize;
 

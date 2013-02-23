@@ -56,6 +56,7 @@
 		[self setMultipleTouchEnabled:NO];
 		
 		showAlreadyTokenized = NO;
+        self.hideResultsTableOnSelection = NO;
 		resultsArray = [[NSMutableArray alloc] init];
 		
 		tokenField = [[TITokenField alloc] initWithFrame:CGRectMake(0, 0, frame.size.width, 42)];
@@ -215,6 +216,10 @@
     [tokenField addToken:token];
 	
 	[tableView deselectRowAtIndexPath:indexPath animated:YES];
+    
+    if (self.hideResultsTableOnSelection) {
+        [self setSearchResultsVisible:NO];
+    }
 }
 
 #pragma mark TextField Methods

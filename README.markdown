@@ -19,6 +19,8 @@ This fork is based on https://github.com/enriquez/TITokenFieldView
 ```
 - Allows search on background
 
+- Possibility to have search results table hidden upon user selecting a suggestion (hideResultsTableOnSelection property)
+
 - Updated example project to take advantage of all changes
 
 ## Usage
