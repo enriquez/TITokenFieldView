@@ -8,13 +8,26 @@
 
 #import "Names.h"
 
+@implementation Contact
+
+- (id)initWithName:(NSString *)aName andEmail:(NSString *)anEmail {
+    if (!(self = [super init])) return nil;
+    
+    self.name = aName;
+    self.email = anEmail;
+    
+    return self;
+}
+
+@end
+
 @implementation Names
 
 + (NSArray *)listOfNames {
 	
 	// Generated with http://www.kleimo.com/random/name.cfm
 	
-	return [NSArray arrayWithObjects:
+	return @[
 			@"Samuel Prescott",
 			@"Grace Mcburney", 
 			@"Rosemary Sells",
@@ -73,8 +86,22 @@
 			@"Sparkle Mousa",
 			@"Chantay Palczynski",
 			@"Denver Perfater",
-			@"Tom Irving",
-			nil];
+			@"Tom Irving"
+			];
+}
+
++ (NSArray /* Contact */ *)listOfContacts {
+    NSArray *names = [Names listOfNames];
+    
+    NSMutableArray *result = [NSMutableArray arrayWithCapacity:[names count]];
+    
+    for (NSString *name in names) {
+        //convert Samuel Prescott to samuel@prescott.com
+        NSString *email = [[[name lowercaseString] stringByReplacingOccurrencesOfString:@" " withString:@"@"] stringByAppendingString:@".com"];
+        [result addObject:[[Contact alloc] initWithName:name andEmail:email]];
+    }
+    
+    return result;
 }
 
 @end

@@ -48,33 +48,34 @@
 - (id)initWithFrame:(CGRect)frame {
 	
     if ((self = [super initWithFrame:frame])){
-		
+        self.searchQueue = [[NSOperationQueue alloc] init];
+        self.searchQueue.maxConcurrentOperationCount = 1;
+        
 		[self setBackgroundColor:[UIColor clearColor]];
 		[self setDelaysContentTouches:YES];
 		[self setMultipleTouchEnabled:NO];
 		
 		showAlreadyTokenized = NO;
+        self.hideResultsTableOnSelection = NO;
 		resultsArray = [[NSMutableArray alloc] init];
 		
 		tokenField = [[TITokenField alloc] initWithFrame:CGRectMake(0, 0, frame.size.width, 42)];
 		[tokenField addTarget:self action:@selector(textFieldDidChange:) forControlEvents:UIControlEventEditingChanged];
 		[tokenField setDelegate:self];
+        tokenField.tokenFieldView = self;
 		[self addSubview:tokenField];
-		[tokenField release];
 		
 		CGFloat tokenFieldBottom = CGRectGetMaxY(tokenField.frame);
 		
 		separator = [[UIView alloc] initWithFrame:CGRectMake(0, tokenFieldBottom, self.bounds.size.width, 1)];
 		[separator setBackgroundColor:[UIColor colorWithWhite:0.7 alpha:1]];
 		[self addSubview:separator];
-		[separator release];
 		
 		// This view is created for convenience, because it resizes and moves with the rest of the subviews.
 		contentView = [[UIView alloc] initWithFrame:CGRectMake(0, tokenFieldBottom + 1, self.bounds.size.width, 
 															   self.bounds.size.height - tokenFieldBottom - 1)];
 		[contentView setBackgroundColor:[UIColor clearColor]];
 		[self addSubview:contentView];
-		[contentView release];
 		
 		if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad){
 			
@@ -86,7 +87,6 @@
 			resultsTable = tableViewController.tableView;
 			
 			popoverController = [[UIPopoverController alloc] initWithContentViewController:tableViewController];
-			[tableViewController release];
 		}
 		else
 		{
@@ -97,7 +97,6 @@
 			[resultsTable setDataSource:self];
 			[resultsTable setHidden:YES];
 			[self addSubview:resultsTable];
-			[resultsTable release];
 			
 			popoverController = nil;
 		}
@@ -201,7 +200,7 @@
     static NSString * CellIdentifier = @"ResultsCell";
     
     UITableViewCell * cell = [tableView dequeueReusableCellWithIdentifier:CellIdentifier];
-    if (!cell) cell = [[[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:CellIdentifier] autorelease];
+    if (!cell) cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:CellIdentifier];
 	[cell.textLabel setText:[self searchResultStringForRepresentedObject:representedObject]];
 	
     return cell;
@@ -210,10 +209,17 @@
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
 	
 	id representedObject = [resultsArray objectAtIndex:indexPath.row];
-	TIToken * token = [tokenField addTokenWithTitle:[self displayStringForRepresentedObject:representedObject]];
-	[token setRepresentedObject:representedObject];
+
+    TIToken * token = [[TIToken alloc] initWithTitle:[self displayStringForRepresentedObject:representedObject]
+                                   representedObject:representedObject
+                                                font:tokenField.font];
+    [tokenField addToken:token];
 	
 	[tableView deselectRowAtIndexPath:indexPath animated:YES];
+    
+    if (self.hideResultsTableOnSelection) {
+        [self setSearchResultsVisible:NO];
+    }
 }
 
 #pragma mark TextField Methods
@@ -291,51 +297,34 @@
 }
 
 - (void)resultsForSubstring:(NSString *)substring {
-	
-	// The brute force searching method.
-	// Takes the input string and compares it against everything in the source array.
-	// If the source is massive, this could take some time.
-	// You could always subclass and override this if needed or do it on a background thread.
-	// GCD would be great for that.
-	
-	[resultsArray removeAllObjects];
-	[resultsTable reloadData];
-	
-	NSString * strippedString = [substring stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-	
-	NSArray * sourceCopy = [sourceArray copy];
-	for (NSString * sourceObject in sourceCopy){
-		
-		NSString * query = [[self searchResultStringForRepresentedObject:sourceObject] lowercaseString];		
-		if ([query rangeOfString:strippedString].location != NSNotFound){
-			
-			BOOL shouldAdd = YES;
-			
-			if (!showAlreadyTokenized){
-				
-				for (TIToken * token in tokenField.tokens){
-					
-					if ([token.representedObject isEqual:sourceObject]){
-						shouldAdd = NO;
-						break;
-					}
-				}
-			}
-			
-			if (shouldAdd){
-				if (![resultsArray containsObject:sourceObject]){
-					[resultsArray addObject:sourceObject];
-				}
-			}
-		}
-	}
-	
-	[sourceCopy release];
-	
-	[resultsArray sortUsingComparator:^NSComparisonResult(id obj1, id obj2) {
-		return [[self searchResultStringForRepresentedObject:obj1] localizedCaseInsensitiveCompare:[self searchResultStringForRepresentedObject:obj2]];
-	}];
-	[resultsTable reloadData];
+    // at first stop all previous operations
+    [self.searchQueue cancelAllOperations];
+    
+    // trim
+    NSString *trimmedSubstring = [substring stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    
+    //and start new one
+    __unsafe_unretained NSBlockOperation *operation;
+    operation = [NSBlockOperation blockOperationWithBlock:^{
+        //call delegate to return search results
+        if ([delegate respondsToSelector:@selector(tokenField:resultsForSearchPattern:)]) {
+            NSArray *arr = [delegate tokenField:tokenField resultsForSearchPattern:trimmedSubstring];
+            
+            //if we got canceled in the meantime, return
+            //this means user continued typing without waiting for search result
+            if ([operation isCancelled]) {
+                return;
+            }
+            
+            //if we got results, show them in results table
+            [resultsArray removeAllObjects];
+            if (arr) {
+                [resultsArray addObjectsFromArray:arr];
+            }
+            [resultsTable performSelectorOnMainThread:@selector(reloadData) withObject:nil waitUntilDone:NO];
+        }
+    }];
+    [self.searchQueue addOperation:operation];
 }
 
 - (void)presentpopoverAtTokenFieldCaretAnimated:(BOOL)animated {
@@ -354,11 +343,8 @@
 }
 
 - (void)dealloc {
+    [self.searchQueue cancelAllOperations]; self.searchQueue = nil;
 	[self setDelegate:nil];
-	[resultsArray release];
-	[sourceArray release];
-	[popoverController release];
-	[super dealloc];
 }
 
 @end
@@ -370,12 +356,12 @@ NSString * const kTextEmpty = @" "; // Just a space
 NSString * const kTextHidden = @"`"; // This character isn't available on iOS (yet) so it's safe.
 
 @interface TITokenFieldInternalDelegate ()
-@property (nonatomic, assign) id <UITextFieldDelegate> delegate;
-@property (nonatomic, assign) TITokenField * tokenField;
+@property (nonatomic, unsafe_unretained) id <UITextFieldDelegate> delegate;
+@property (nonatomic, unsafe_unretained) TITokenField * tokenField;
 @end
 
 @interface TITokenField ()
-@property (nonatomic, readonly) UIScrollView * scrollView;
+@property (unsafe_unretained, nonatomic, readonly) UIScrollView * scrollView;
 @end
 
 @interface TITokenField (Private)
@@ -414,6 +400,18 @@ NSString * const kTextHidden = @"`"; // This character isn't available on iOS (y
 	return self;
 }
 
+- (NSString *)textEmpty {
+    //if there is at least one token, return space
+    if (tokens.count > 0) {
+        return kTextEmpty;
+    }
+    //otherwise return empty string
+    //so that the placeholder is displayed
+    else {
+        return @"";
+    }
+}
+
 - (void)setup {
 	
 	[self setBorderStyle:UITextBorderStyleNone];
@@ -438,7 +436,7 @@ NSString * const kTextHidden = @"`"; // This character isn't available on iOS (y
 	[self setAddButtonAction:nil target:nil];
 	
 	[self setPromptText:@"To:"];
-	[self setText:kTextEmpty];
+	[self setText:[self textEmpty]];
 	
 	internalDelegate = [[TITokenFieldInternalDelegate alloc] init];
 	[internalDelegate setTokenField:self];
@@ -447,7 +445,7 @@ NSString * const kTextHidden = @"`"; // This character isn't available on iOS (y
 	tokens = [[NSMutableArray alloc] init];
 	editable = YES;
 	removesTokensOnEndEditing = YES;
-	tokenizingCharacters = [[NSCharacterSet characterSetWithCharactersInString:@","] retain];
+	tokenizingCharacters = [NSCharacterSet characterSetWithCharactersInString:@","];
 }
 
 - (void)setFrame:(CGRect)frame {
@@ -457,7 +455,7 @@ NSString * const kTextHidden = @"`"; // This character isn't available on iOS (y
 }
 
 - (void)setText:(NSString *)text {
-	[super setText:((text.length == 0 || [text isEqualToString:@""]) ? kTextEmpty : text)];
+	[super setText:((text.length == 0 || [text isEqualToString:@""]) ? [self textEmpty] : text)];
 }
 
 - (void)setFont:(UIFont *)font {
@@ -474,7 +472,7 @@ NSString * const kTextHidden = @"`"; // This character isn't available on iOS (y
 }
 
 - (NSArray *)tokens {
-	return [[tokens copy] autorelease];
+	return [tokens copy];
 }
 
 - (UIScrollView *)scrollView {
@@ -501,7 +499,7 @@ NSString * const kTextHidden = @"`"; // This character isn't available on iOS (y
 		
 		for (TIToken * token in tokens) [token removeFromSuperview];
 		
-		NSString * untokenized = kTextEmpty;
+		NSString * untokenized = [self textEmpty];
 		
 		if (tokens.count){
 			
@@ -516,7 +514,6 @@ NSString * const kTextHidden = @"`"; // This character isn't available on iOS (y
 				untokenized = [NSString stringWithFormat:@"%d recipients", titles.count];
 			}
 			
-			[titles release];
 		}
 		
 		[self setText:untokenized];
@@ -526,14 +523,15 @@ NSString * const kTextHidden = @"`"; // This character isn't available on iOS (y
 }
 
 - (void)didChangeText {
-	if (self.text.length == 0) [self setText:kTextEmpty];
+	//if (self.text.length == 0) [self setText:[self textEmpty]];
+    //do not the above as it causes infite recursion
 }
 
 - (BOOL)canPerformAction:(SEL)action withSender:(id)sender {
 	
 	// Stop the cut, copy, select and selectAll appearing when the field is 'empty'.
 	if (action == @selector(cut:) || action == @selector(copy:) || action == @selector(select:) || action == @selector(selectAll:))
-		return ![self.text isEqualToString:kTextEmpty];
+		return ![self.text isEqualToString:[self textEmpty]];
 	 
 	return [super canPerformAction:action withSender:sender];
 }
@@ -547,10 +545,24 @@ NSString * const kTextHidden = @"`"; // This character isn't available on iOS (y
 #pragma mark Token Handling
 - (TIToken *)addTokenWithTitle:(NSString *)title {
 	
+    //this is token being created  from text user entered, notify delegate to give him a chance
+    //to modify the title (trim it or etc.)
+    if (self.tokenFieldView.delegate &&
+        [self.tokenFieldView.delegate respondsToSelector:@selector(tokenField:willCreateTokenWithTitle:)]) {
+        title = [self.tokenFieldView.delegate tokenField:self willCreateTokenWithTitle:title];
+    }
+
 	if (title.length){
 		TIToken * token = [[TIToken alloc] initWithTitle:title representedObject:nil font:self.font];
-		[self addToken:token];
-		[token release];
+
+        //this is token being added from text user entered, notify delegate to give him a chance
+        //to attach  object to it
+        if (self.tokenFieldView.delegate &&
+            [self.tokenFieldView.delegate respondsToSelector:@selector(tokenField:willAddToken:withTitle:)]) {
+            [self.tokenFieldView.delegate tokenField:self willAddToken:token withTitle:title];
+        }
+        
+        [self addToken:token];
 		return token;
 	}
 	
@@ -568,7 +580,13 @@ NSString * const kTextHidden = @"`"; // This character isn't available on iOS (y
 	if (![tokens containsObject:token]) [tokens addObject:token];
 	
 	[self setResultsModeEnabled:NO];
-	[self setText:kTextEmpty];
+	[self setText:[self textEmpty]];
+    
+    //notify delegate that a token has been added
+    if (self.tokenFieldView.delegate &&
+        [self.tokenFieldView.delegate respondsToSelector:@selector(tokenField:didAddToken:)]) {
+        [self.tokenFieldView.delegate tokenField:self didAddToken:token];
+    }
 }
 
 - (void)removeToken:(TIToken *)token {
@@ -579,8 +597,14 @@ NSString * const kTextHidden = @"`"; // This character isn't available on iOS (y
 	[token removeFromSuperview];
 	[tokens removeObject:token];
 	
-	[self setText:kTextEmpty];
+	[self setText:[self textEmpty]];
 	[self setResultsModeEnabled:NO];
+    
+    //notify delegate that a token has been removed
+    if (self.tokenFieldView.delegate &&
+        [self.tokenFieldView.delegate respondsToSelector:@selector(tokenField:didRemoveToken:)]) {
+        [self.tokenFieldView.delegate tokenField:self didRemoveToken:token];
+    }
 }
 
 - (void)selectToken:(TIToken *)token {
@@ -600,15 +624,15 @@ NSString * const kTextHidden = @"`"; // This character isn't available on iOS (y
 	[selectedToken setSelected:NO];
 	selectedToken = nil;
 	
-	[self setText:kTextEmpty];
+	[self setText:[self textEmpty]];
 }
 
 - (void)tokenizeText {
 	
-	if (![self.text isEqualToString:kTextEmpty] && ![self.text isEqualToString:kTextHidden]){
+	if (![self.text isEqualToString:[self textEmpty]] && ![self.text isEqualToString:kTextHidden]){
 		
 		NSArray * components = [self.text componentsSeparatedByCharactersInSet:tokenizingCharacters];
-		for (NSString * component in components){
+		for (__strong NSString * component in components){
 			
 			component = [component stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 			if (component.length) [self addTokenWithTitle:component];
@@ -740,14 +764,14 @@ NSString * const kTextHidden = @"`"; // This character isn't available on iOS (y
 	
 	NSMutableArray * titles = [[NSMutableArray alloc] init];
 	for (TIToken * token in tokens) [titles addObject:token.title];
-	return [titles autorelease];
+	return titles;
 }
 
 - (NSArray *)tokenObjects {
 	
 	NSMutableArray * objects = [[NSMutableArray alloc] init];
 	for (TIToken * token in tokens) [objects addObject:token.representedObject];
-	return [objects autorelease];
+	return objects;
 }
 
 - (void)setPromptText:(NSString *)text {
@@ -759,7 +783,6 @@ NSString * const kTextHidden = @"`"; // This character isn't available on iOS (y
 			label = [[UILabel alloc] initWithFrame:CGRectZero];
 			[label setTextColor:[UIColor colorWithWhite:0.5 alpha:1]];
 			[self setLeftView:label];
-			[label release];
 			
 			[self setLeftViewMode:UITextFieldViewModeAlways];
 		}
@@ -824,10 +847,6 @@ NSString * const kTextHidden = @"`"; // This character isn't available on iOS (y
 
 - (void)dealloc {
 	[self setDelegate:nil];
-	[internalDelegate release];
-	[tokens release];
-	[tokenizingCharacters release];
-    [super dealloc];
 }
 
 @end
@@ -873,7 +892,7 @@ NSString * const kTextHidden = @"`"; // This character isn't available on iOS (y
 
 - (BOOL)textField:(UITextField *)textField shouldChangeCharactersInRange:(NSRange)range replacementString:(NSString *)string {
 	
-	if (tokenField.tokens.count && [string isEqualToString:@""] && [tokenField.text isEqualToString:kTextEmpty]){
+	if (tokenField.tokens.count && [string isEqualToString:@""] && [tokenField.text isEqualToString:[tokenField textEmpty]]){
 		[tokenField selectToken:[tokenField.tokens lastObject]];
 		return NO;
 	}
@@ -953,11 +972,11 @@ CGPathRef CGPathCreateDisclosureIndicatorPath(CGPoint arrowPointFront, CGFloat h
 	if ((self = [super init])){
 		
 		title = [aTitle copy];
-		representedObject = [object retain];
+		representedObject = object;
 		accessoryType = TITokenAccessoryTypeNone;
 		
-		font = [aFont retain];
-		tintColor = [[UIColor colorWithRed:0.216 green:0.373 blue:0.965 alpha:1] retain];
+		font = aFont;
+		tintColor = [UIColor colorWithRed:0.216 green:0.373 blue:0.965 alpha:1];
 		maxWidth = 200;
 		[self sizeToFit];
 		
@@ -1150,7 +1169,6 @@ CGPathRef CGPathCreateDisclosureIndicatorPath(CGPoint arrowPointFront, CGFloat h
 	
 	if (newTitle){
 		NSString * copy = [newTitle copy];
-		[title release];
 		title = copy;
 		
 		[self sizeToFit];
@@ -1160,8 +1178,6 @@ CGPathRef CGPathCreateDisclosureIndicatorPath(CGPoint arrowPointFront, CGFloat h
 - (void)setFont:(UIFont *)newFont {
 	
 	if (!newFont) newFont = [UIFont systemFontOfSize:14];
-	[newFont retain];
-	[font release];
 	font = newFont;
 	
 	[self sizeToFit];
@@ -1171,8 +1187,6 @@ CGPathRef CGPathCreateDisclosureIndicatorPath(CGPoint arrowPointFront, CGFloat h
 	
 	if (!newTintColor) newTintColor = [UIColor colorWithRed:0.867 green:0.906 blue:0.973 alpha:1];
 	
-	[newTintColor retain];
-	[tintColor release];
 	tintColor = newTintColor;
 	
 	[self setNeedsDisplay];
@@ -1198,13 +1212,6 @@ CGPathRef CGPathCreateDisclosureIndicatorPath(CGPoint arrowPointFront, CGFloat h
 	return [NSString stringWithFormat:@"<TIToken %p; title = \"%@\">", self, title];
 }
 
-- (void)dealloc {
-	[title release];
-	[font release];
-	[tintColor release];
-	[representedObject release];
-    [super dealloc];
-}
 
 @end
 
