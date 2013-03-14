@@ -400,6 +400,18 @@ NSString * const kTextHidden = @"`"; // This character isn't available on iOS (y
 	return self;
 }
 
+- (NSString *)textEmpty {
+    //if there is at least one token, return space
+    if (tokens.count > 0) {
+        return kTextEmpty;
+    }
+    //otherwise return empty string
+    //so that the placeholder is displayed
+    else {
+        return @"";
+    }
+}
+
 - (void)setup {
 	
 	[self setBorderStyle:UITextBorderStyleNone];
@@ -424,7 +436,7 @@ NSString * const kTextHidden = @"`"; // This character isn't available on iOS (y
 	[self setAddButtonAction:nil target:nil];
 	
 	[self setPromptText:@"To:"];
-	[self setText:kTextEmpty];
+	[self setText:[self textEmpty]];
 	
 	internalDelegate = [[TITokenFieldInternalDelegate alloc] init];
 	[internalDelegate setTokenField:self];
@@ -443,7 +455,7 @@ NSString * const kTextHidden = @"`"; // This character isn't available on iOS (y
 }
 
 - (void)setText:(NSString *)text {
-	[super setText:((text.length == 0 || [text isEqualToString:@""]) ? kTextEmpty : text)];
+	[super setText:((text.length == 0 || [text isEqualToString:@""]) ? [self textEmpty] : text)];
 }
 
 - (void)setFont:(UIFont *)font {
@@ -487,7 +499,7 @@ NSString * const kTextHidden = @"`"; // This character isn't available on iOS (y
 		
 		for (TIToken * token in tokens) [token removeFromSuperview];
 		
-		NSString * untokenized = kTextEmpty;
+		NSString * untokenized = [self textEmpty];
 		
 		if (tokens.count){
 			
@@ -511,14 +523,15 @@ NSString * const kTextHidden = @"`"; // This character isn't available on iOS (y
 }
 
 - (void)didChangeText {
-	if (self.text.length == 0) [self setText:kTextEmpty];
+	//if (self.text.length == 0) [self setText:[self textEmpty]];
+    //do not the above as it causes infite recursion
 }
 
 - (BOOL)canPerformAction:(SEL)action withSender:(id)sender {
 	
 	// Stop the cut, copy, select and selectAll appearing when the field is 'empty'.
 	if (action == @selector(cut:) || action == @selector(copy:) || action == @selector(select:) || action == @selector(selectAll:))
-		return ![self.text isEqualToString:kTextEmpty];
+		return ![self.text isEqualToString:[self textEmpty]];
 	 
 	return [super canPerformAction:action withSender:sender];
 }
@@ -567,7 +580,7 @@ NSString * const kTextHidden = @"`"; // This character isn't available on iOS (y
 	if (![tokens containsObject:token]) [tokens addObject:token];
 	
 	[self setResultsModeEnabled:NO];
-	[self setText:kTextEmpty];
+	[self setText:[self textEmpty]];
     
     //notify delegate that a token has been added
     if (self.tokenFieldView.delegate &&
@@ -584,7 +597,7 @@ NSString * const kTextHidden = @"`"; // This character isn't available on iOS (y
 	[token removeFromSuperview];
 	[tokens removeObject:token];
 	
-	[self setText:kTextEmpty];
+	[self setText:[self textEmpty]];
 	[self setResultsModeEnabled:NO];
     
     //notify delegate that a token has been removed
@@ -611,12 +624,12 @@ NSString * const kTextHidden = @"`"; // This character isn't available on iOS (y
 	[selectedToken setSelected:NO];
 	selectedToken = nil;
 	
-	[self setText:kTextEmpty];
+	[self setText:[self textEmpty]];
 }
 
 - (void)tokenizeText {
 	
-	if (![self.text isEqualToString:kTextEmpty] && ![self.text isEqualToString:kTextHidden]){
+	if (![self.text isEqualToString:[self textEmpty]] && ![self.text isEqualToString:kTextHidden]){
 		
 		NSArray * components = [self.text componentsSeparatedByCharactersInSet:tokenizingCharacters];
 		for (__strong NSString * component in components){
@@ -879,7 +892,7 @@ NSString * const kTextHidden = @"`"; // This character isn't available on iOS (y
 
 - (BOOL)textField:(UITextField *)textField shouldChangeCharactersInRange:(NSRange)range replacementString:(NSString *)string {
 	
-	if (tokenField.tokens.count && [string isEqualToString:@""] && [tokenField.text isEqualToString:kTextEmpty]){
+	if (tokenField.tokens.count && [string isEqualToString:@""] && [tokenField.text isEqualToString:[tokenField textEmpty]]){
 		[tokenField selectToken:[tokenField.tokens lastObject]];
 		return NO;
 	}
